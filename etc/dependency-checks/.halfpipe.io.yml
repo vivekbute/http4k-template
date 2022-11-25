@@ -1,0 +1,29 @@
+team: sn-digital
+pipeline: gradle-versions-reporter
+platform: actions
+slack_channel: "#http4k-sn"
+
+triggers:
+  - type: git
+    shallow: true
+    watched_paths:
+      - etc/dependency-checks
+      - build.gradle
+      - settings.gradle
+  - type: timer
+    cron: "0 20 * * 6"
+
+tasks:
+  - name: gradle-versions-report
+    type: run
+    script: \generate-and-send-report
+    docker:
+      image: eu.gcr.io/halfpipe-io/gradle-versions-reporter
+    save_artifacts:
+      - ../../target/dependencyUpdates/report.json
+    vars:
+      BASE_REPO_DIR: "../../"
+      PROJECT_NAME: http4k-sn-template
+      SLACK_CHANNEL: http4k-sn
+      SLACK_OAUTH_TOKEN: ((/springernature/data/shared/PPG-gradle-version-reporter slack-oauth-token))
+      IGNORE_ZERO_UPDATES: true

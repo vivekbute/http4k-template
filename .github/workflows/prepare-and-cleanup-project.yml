@@ -1,0 +1,43 @@
+name: prepare-and-cleanup-project
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  prepare-project:
+    runs-on: ee-runner
+    name: Prepare and cleanup project
+    timeout-minutes: 60
+    if: github.event.repository.name != 'http4k-sn-template'
+    steps:
+      - name: Fetch sources
+        uses: actions/checkout@v2
+      - name: Prepare project
+        run: |
+          docker-compose -f .github/prepare-and-cleanup-project/docker-compose.yml run \
+            -e GITHUB_REPOSITORY \
+            -e GITHUB_ACTOR \
+            -e BUILD_VERSION \
+            -e GIT_REVISION \
+            prepare
+      - name: Cleanup template files
+        run: |
+          docker-compose -f .github/prepare-and-cleanup-project/docker-compose.yml run \
+            -e GITHUB_REPOSITORY \
+            -e GITHUB_ACTOR \
+            -e BUILD_VERSION \
+            -e GIT_REVISION \
+            cleanup
+      - name: Commit files
+        run: |
+          git config --local user.email "noreply@springernature.com"
+          git config --local user.name "Prepare Project GitHub Action"
+          git add .
+          git commit -m "Prepare project and cleanup template files"
+      - name: Push changes
+        uses: ad-m/github-push-action@v0.6.0
+        with:
+          branch: main
+          github_token: ${{ secrets.GITHUB_TOKEN }}

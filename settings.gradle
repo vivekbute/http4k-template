@@ -1,0 +1,71 @@
+rootProject.name = "http4k-sn-template"
+
+include ":grafana-dashboard"
+
+boolean useRemoteBuildCache = System.env.RUNNING_IN_CI == "true"
+
+buildCache {
+    local {
+        enabled = !useRemoteBuildCache
+    }
+    remote(HttpBuildCache) {
+        enabled = useRemoteBuildCache
+        url = "https://gradle-cache.halfpipe.io/cache/"
+        push = true
+    }
+}
+
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+
+    repositories {
+        maven {
+            url "https://springernature.jfrog.io/springernature/libs-release/"
+            credentials {
+                username "$System.env.ARTIFACTORY_USERNAME"
+                password "$System.env.ARTIFACTORY_PASSWORD"
+            }
+            authentication {
+                //noinspection GroovyAssignabilityCheck
+                basic(BasicAuthentication)
+            }
+            mavenContent {
+                releasesOnly()
+            }
+        }
+        mavenCentral() {
+            mavenContent {
+                releasesOnly()
+            }
+        }
+    }
+
+    versionCatalogs {
+        libs {
+            version("http4kSn", "3.5.3")
+            version("http4k", "4.33.1.0")
+            version("kotlin", "1.7.20")
+            version("junit-jupiter", "5.9.1")
+            version("hamkrest", "1.8.0.1")
+            version("grafanarama", "3.0.3")
+
+            library("http4kSn", "com.springernature", "http4k-sn").versionRef("http4kSn")
+
+            library("grafanarama", "com.springernature", "grafanarama").versionRef("grafanarama")
+
+            library("kotlinTest", "org.jetbrains.kotlin", "kotlin-test").versionRef("kotlin")
+
+            library("junitJupiterApi", "org.junit.jupiter", "junit-jupiter-api").versionRef("junit-jupiter")
+            library("junitJupiterEngine", "org.junit.jupiter", "junit-jupiter-engine").versionRef("junit-jupiter")
+            library("junitJupiterParams", "org.junit.jupiter", "junit-jupiter-params").versionRef("junit-jupiter")
+
+            library("hamkrest", "com.natpryce", "hamkrest").versionRef("hamkrest")
+
+            library("http4kTestingHamkrest", "org.http4k", "http4k-testing-hamkrest").versionRef("http4k")
+
+            bundle("test", ["junitJupiterApi", "junitJupiterParams", "kotlinTest", "hamkrest", "http4kTestingHamkrest"])
+
+            bundle("testRuntime", ["junitJupiterEngine"])
+        }
+    }
+}

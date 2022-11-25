@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+IFS=$'\n\t'
+
+artifactory_username() {
+  local ARTIFACTORY_USERNAME=${ARTIFACTORY_USERNAME:-}
+  if [[ -z "$ARTIFACTORY_USERNAME" ]]; then
+    ARTIFACTORY_USERNAME=$(vault kv get -field=username springernature/shared/artifactory)
+  fi
+  echo "$ARTIFACTORY_USERNAME"
+}
+
+artifactory_password() {
+  local ARTIFACTORY_PASSWORD=${ARTIFACTORY_PASSWORD:-}
+  if [[ -z "$ARTIFACTORY_PASSWORD" ]]; then
+    ARTIFACTORY_PASSWORD=$(vault kv get -field=password springernature/shared/artifactory)
+  fi
+  echo "$ARTIFACTORY_PASSWORD"
+}
+
+main() {
+  local DEFAULT_COMMANDS=("clean" "build")
+  local COMMANDS=("$@")
+
+  if [[ ${#COMMANDS[*]} -eq 0 ]]; then
+      for DEFAULT_COMMAND in "${DEFAULT_COMMANDS[@]}"; do
+        COMMANDS+=("$DEFAULT_COMMAND")
+      done
+  fi
+
+  local BASE_DIR
+  BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  cd "$BASE_DIR"
+
+  local ARTIFACTORY_USERNAME="${ARTIFACTORY_USERNAME:-$(artifactory_username)}"
+  local ARTIFACTORY_PASSWORD="${ARTIFACTORY_PASSWORD:-$(artifactory_password)}"
+
+  if [[ -z "$ARTIFACTORY_USERNAME" || -z "$ARTIFACTORY_PASSWORD" ]]; then
+    echo "Cannot determine artifactory username and/or password; exiting..." >&2
+    return 1
+  fi
+
+  # use halfpipe cache dir if present
+  if [[ -d "/var/halfpipe/cache" ]]; then
+    export GRADLE_USER_HOME="/var/halfpipe/cache/.gradle"
+    echo "Gradle user home will be set to $GRADLE_USER_HOME"
+  fi
+
+  if [[ -d "/var/halfpipe/shared-cache/gradle" ]]; then
+    # this should be the directory containing the populated modules-2 - https://docs.gradle.org/7.1/userguide/dependency_resolution.html#sub:shared-readonly-cache
+    export GRADLE_RO_DEP_CACHE="/var/halfpipe/shared-cache/gradle/caches"
+    echo "Read-only dependency cache will be used at $GRADLE_RO_DEP_CACHE"
+  fi
+
+  local COMMAND_STRING=""
+  for COMMAND in "${COMMANDS[@]}"; do
+     COMMAND_STRING="$COMMAND_STRING $COMMAND"
+  done
+
+  local GRADLE_COMMAND
+  GRADLE_COMMAND="./gradlew --parallel $COMMAND_STRING"
+
+  RUNNING_IN_CI=${RUNNING_IN_CI:-}
+  if [[ "$RUNNING_IN_CI" == 'true' ]]; then
+    echo "We appear to be on CI - daemon will be disabled"
+    GRADLE_COMMAND="$GRADLE_COMMAND --no-daemon"
+  fi
+
+  (
+    export ARTIFACTORY_USERNAME
+    export ARTIFACTORY_PASSWORD
+    eval "$GRADLE_COMMAND"
+  )
+}
+
+main "$@"

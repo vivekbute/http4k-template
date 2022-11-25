@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+IFS=$'\n\t'
+
+main() {
+
+  # Prepare variables
+  TEMPLATE_NAME="http4k-sn-template"
+  TEMPLATE_PACKAGE_NAME="com.springernature.http4k.template"
+
+  NAME="${GITHUB_REPOSITORY##*/}"
+  SAFE_NAME=$(echo $NAME | sed 's/[^a-zA-Z0-9]//g' | tr '[:upper:]' '[:lower:]')
+  ACTOR=$(echo $GITHUB_ACTOR | tr '[:upper:]' '[:lower:]')
+  PACKAGE_NAME="com.springernature.$SAFE_NAME"
+
+  echo "NAME = $NAME"
+  echo "SAFE_NAME = $SAFE_NAME"
+  echo "ACTOR = $ACTOR"
+  echo "PACKAGE_NAME = $PACKAGE_NAME"
+
+  # Replace placeholders
+  sed -i "s/$TEMPLATE_NAME/$NAME/g" build.gradle
+  sed -i "s/$TEMPLATE_PACKAGE_NAME/$PACKAGE_NAME/g" build.gradle
+  sed -i "s/$TEMPLATE_PACKAGE_NAME/$PACKAGE_NAME/g" README.md
+  sed -i "s/$TEMPLATE_NAME/$NAME/g" README.md
+  sed -i "s/$TEMPLATE_NAME/$NAME/g" settings.gradle
+  sed -i "s/$TEMPLATE_NAME/$NAME/g" .halfpipe.io
+  sed -i "s/$TEMPLATE_NAME/$NAME/g" etc/dependency-checks/.halfpipe.io.yml
+  sed -i "s/$TEMPLATE_NAME/$NAME/g" etc/owasp-security-checks/.halfpipe.io.yml
+  sed -i "s/# name: your-application-name/name: $NAME/g" etc/cf/manifest-live.yml
+  sed -i "s/$TEMPLATE_NAME\.springernature\.app/$NAME.private.springernature.app/g" etc/cf/manifest-live.yml
+  sed -i "s/$TEMPLATE_NAME/$NAME/g" grafana-dashboard/src/main/kotlin/com/springernature/http4k/template/Main.kt
+
+  sed -i "s/$TEMPLATE_NAME/$NAME/g" src/main/kotlin/com/springernature/http4k/template/TemplateApp.kt
+  sed -i "s/$TEMPLATE_NAME/$NAME/g" src/test/kotlin/com/springernature/http4k/template/external/RealService.kt
+
+  # Rename classes
+  sed -i "s/TemplateApp/App/g" src/main/kotlin/com/springernature/http4k/template/TemplateApp.kt
+  sed -i "s/TemplateApp/App/g" src/main/kotlin/com/springernature/http4k/template/Main.kt
+  sed -i "s/TemplateApp/App/g" src/test/kotlin/com/springernature/http4k/template/TestEnvironment.kt
+  mv src/main/kotlin/com/springernature/http4k/template/TemplateApp.kt src/main/kotlin/com/springernature/http4k/template/App.kt
+
+  # Replace template package name in project files
+  find src -type f -exec sed -i "s/$TEMPLATE_PACKAGE_NAME/$PACKAGE_NAME/g" {} +
+
+  # Move content to new package
+  mkdir -p src/main/kotlin/${PACKAGE_NAME//.//}
+  cp -R src/main/kotlin/${TEMPLATE_PACKAGE_NAME//.//}/* src/main/kotlin/${PACKAGE_NAME//.//}/
+  rm -rf src/main/kotlin/com/springernature/http4k/
+
+  mkdir -p src/test/kotlin/${PACKAGE_NAME//.//}
+  cp -R src/test/kotlin/${TEMPLATE_PACKAGE_NAME//.//}/* src/test/kotlin/${PACKAGE_NAME//.//}/
+  rm -rf src/test/kotlin/com/springernature/http4k/
+}
+
+main

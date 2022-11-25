@@ -1,0 +1,131 @@
+# Generated using halfpipe cli version 3.103.1
+name: http4k-sn-template
+"on":
+  push:
+    branches:
+    - main
+  workflow_dispatch: {}
+env:
+  ARTIFACTORY_PASSWORD: ${{ secrets.EE_ARTIFACTORY_PASSWORD }}
+  ARTIFACTORY_URL: ${{ secrets.EE_ARTIFACTORY_URL }}
+  ARTIFACTORY_USERNAME: ${{ secrets.EE_ARTIFACTORY_USERNAME }}
+  BUILD_VERSION: 2.${{ github.run_number }}.0
+  GIT_REVISION: ${{ github.sha }}
+  RUNNING_IN_CI: "true"
+  VAULT_ROLE_ID: ${{ secrets.VAULT_ROLE_ID }}
+  VAULT_SECRET_ID: ${{ secrets.VAULT_SECRET_ID }}
+concurrency: ${{ github.workflow }}
+jobs:
+  build:
+    name: build
+    runs-on: ee-runner
+    timeout-minutes: 60
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+      with:
+        lfs: true
+        submodules: recursive
+        ssh-key: ${{ secrets.EE_GITHUB_PRIVATE_KEY }}
+    - name: build
+      run: |-
+        docker-compose -f docker-compose.yml pull
+        docker-compose -f docker-compose.yml run \
+          --use-aliases \
+          -e ARTIFACTORY_PASSWORD \
+          -e ARTIFACTORY_URL \
+          -e ARTIFACTORY_USERNAME \
+          -e BUILD_VERSION \
+          -e DOCKER_CERT_PATH \
+          -e DOCKER_HOST=tcp://docker:2376 \
+          -e DOCKER_TLS_CERTDIR \
+          -e DOCKER_TLS_VERIFY \
+          -e GIT_REVISION \
+          -e RUNNING_IN_CI \
+          -e VAULT_ROLE_ID \
+          -e VAULT_SECRET_ID \
+          -v /certs:/certs \
+          -v /mnt/halfpipe-cache/sn-digital:/var/halfpipe/shared-cache \
+          app \
+          ./build clean build --console=plain
+    - name: Package artifacts
+      run: tar -cvf /tmp/halfpipe-artifacts.tar target/distributions
+      working-directory: ${{ github.workspace }}
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: artifacts
+        path: /tmp/halfpipe-artifacts.tar
+    - name: Package artifacts-failure
+      if: failure()
+      run: tar -cvf /tmp/halfpipe-artifacts.tar target/reports
+      working-directory: ${{ github.workspace }}
+    - name: Upload artifacts-failure
+      if: failure()
+      uses: actions/upload-artifact@v3
+      with:
+        name: artifacts-failure
+        path: /tmp/halfpipe-artifacts.tar
+    - name: Docker cleanup
+      if: always()
+      run: docker-compose -f docker-compose.yml down
+    - name: 'Notify slack #http4k-sn (failure)'
+      if: failure()
+      uses: yukin01/slack-bot-action@v0.0.4
+      with:
+        status: ${{ job.status }}
+        oauth_token: ${{ secrets.EE_SLACK_TOKEN }}
+        channel: '#http4k-sn'
+        text: ""
+  integration-tests-live:
+    name: integration-tests-live
+    needs:
+    - build
+    runs-on: ee-runner
+    timeout-minutes: 60
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+      with:
+        lfs: true
+        submodules: recursive
+        ssh-key: ${{ secrets.EE_GITHUB_PRIVATE_KEY }}
+    - name: Download artifacts
+      uses: actions/download-artifact@v3
+      with:
+        name: artifacts
+    - name: Extract artifacts
+      run: tar -xvf halfpipe-artifacts.tar; rm halfpipe-artifacts.tar
+      working-directory: ${{ github.workspace }}
+    - name: integration-tests-live
+      run: |-
+        docker-compose -f docker-compose.yml pull
+        docker-compose -f docker-compose.yml run \
+          --use-aliases \
+          -e ARTIFACTORY_PASSWORD \
+          -e ARTIFACTORY_URL \
+          -e ARTIFACTORY_USERNAME \
+          -e BUILD_VERSION \
+          -e DOCKER_CERT_PATH \
+          -e DOCKER_HOST=tcp://docker:2376 \
+          -e DOCKER_TLS_CERTDIR \
+          -e DOCKER_TLS_VERIFY \
+          -e GIT_REVISION \
+          -e RUNNING_IN_CI \
+          -e VAULT_ROLE_ID \
+          -e VAULT_SECRET_ID \
+          -v /certs:/certs \
+          -v /mnt/halfpipe-cache/sn-digital:/var/halfpipe/shared-cache \
+          app \
+          bin/run-integration-tests live
+    - name: Docker cleanup
+      if: always()
+      run: docker-compose -f docker-compose.yml down
+    - name: 'Notify slack #http4k-sn (failure)'
+      if: failure()
+      uses: yukin01/slack-bot-action@v0.0.4
+      with:
+        status: ${{ job.status }}
+        oauth_token: ${{ secrets.EE_SLACK_TOKEN }}
+        channel: '#http4k-sn'
+        text: ""

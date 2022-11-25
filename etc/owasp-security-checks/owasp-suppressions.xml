@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<suppressions
+        xmlns="https://jeremylong.github.io/DependencyCheck/dependency-suppression.1.3.xsd">
+
+    <!-- https://jeremylong.github.io/DependencyCheck/general/suppression.html -->
+
+    <!-- Android annotations (via gRPC) is not RipudamanKaushikDal/projects -->
+    <suppress>
+        <notes><![CDATA[
+        file name: annotations-4.1.1.4.jar
+        ]]></notes>
+        <packageUrl regex="true">^pkg:maven/com\.google\.android/annotations@.*$</packageUrl>
+        <cpe>cpe:/a:projects_project:projects</cpe>
+    </suppress>
+
+</suppressions>

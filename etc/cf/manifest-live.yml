@@ -1,0 +1,19 @@
+---
+applications:
+  - # name: your-application-name
+    memory: 256M
+    instances: 2
+    buildpacks:
+      - https://github.com/cloudfoundry/java-buildpack.git#v4.48
+    routes:
+      - route: http4k-sn-template.springernature.app
+    services:
+      # - your-logging-service
+      # - your-promtheus-service
+    stack: cflinuxfs3
+    env:
+      JAVA_OPTS: -Xmx128m -Xms128m -Xss256k -XX:MaxMetaspaceSize=48m -XX:+UseG1GC -XX:MaxGCPauseMillis=250 -Dsun.net.inetaddr.ttl=30 -XX:-OmitStackTraceInFastThrow
+      JBP_CONFIG_OPEN_JDK_JRE: '{ jre: { version: 17.+ }}'
+      APP_ENV: live
+      DEPLOY_ENV: live
+      # SENTRY_DSN: your-sentry-DSN

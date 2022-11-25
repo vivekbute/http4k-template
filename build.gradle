@@ -1,0 +1,183 @@
+import org.gradle.api.tasks.testing.logging.TestLogEvent
+import org.owasp.dependencycheck.reporting.ReportGenerator
+
+buildscript {
+    // alas, we can't access the version catalogue directly in 'plugins'
+    ext.kotlin_version = libs.versions.kotlin.get()
+
+    repositories {
+        maven {
+            url "https://springernature.jfrog.io/springernature/libs-release/"
+            credentials {
+                username "$System.env.ARTIFACTORY_USERNAME"
+                password "$System.env.ARTIFACTORY_PASSWORD"
+            }
+            authentication {
+                basic(BasicAuthentication)
+            }
+            mavenContent {
+                releasesOnly()
+            }
+        }
+        gradlePluginPortal() {
+            mavenContent {
+                releasesOnly()
+            }
+            content {
+                includeGroup "com.github.ben-manes"
+            }
+        }
+        mavenCentral() {
+            mavenContent {
+                releasesOnly()
+            }
+        }
+    }
+}
+
+plugins {
+    id "idea"
+    id "application"
+    id "project-report"
+    id "java"
+    id "org.jetbrains.kotlin.jvm" version "$kotlin_version" apply false
+    id "com.github.ben-manes.versions" version "0.43.0"
+    id "org.owasp.dependencycheck" version "7.3.0"
+}
+
+if (System.env.ARTIFACTORY_USERNAME == null || System.env.ARTIFACTORY_USERNAME.trim().isEmpty()
+        || System.env.ARTIFACTORY_PASSWORD == null || System.env.ARTIFACTORY_PASSWORD.trim().isEmpty()) {
+    throw new GradleException("Environment variables ARTIFACTORY_USERNAME and ARTIFACTORY_PASSWORD must be set for dependency resolution to work. See README.md for details.")
+}
+
+ext {
+    buildJvmVersion = JavaLanguageVersion.of(17)
+}
+
+apply plugin: com.github.benmanes.gradle.versions.VersionsPlugin
+apply plugin: "org.jetbrains.kotlin.jvm"
+
+kotlin {
+    jvmToolchain {
+        languageVersion.set(buildJvmVersion)
+    }
+}
+
+java {
+    consistentResolution {
+        useCompileClasspathVersions()
+    }
+}
+
+var buildVersion = System.env.BUILD_VERSION
+var gitRevision = System.env.GIT_REVISION
+if (buildVersion != null) {
+    project.version = buildVersion
+} else if (gitRevision != null) {
+    project.version = gitRevision
+} else {
+    project.version = "SNAPSHOT"
+}
+
+project.group = "com.springernature"
+
+buildDir = "target"
+
+tasks.named("dependencyUpdates").configure {
+    rejectVersionIf {
+        def isNonStable = { String group, String module, String version ->
+            def stableKeyword = ['RELEASE', 'FINAL', 'GA'].any { keyword -> version.toUpperCase().contains(keyword) }
+            def regex = /^[0-9,.v-]+(-r)?$/
+            return !stableKeyword && !(version ==~ regex)
+        }
+
+        isNonStable(it.candidate.group, it.candidate.module, it.candidate.version) &&
+                !isNonStable(it.candidate.group, it.candidate.module, it.currentVersion)
+    }
+}
+
+tasks.withType(JavaForkOptions) {
+    // Forked processes like GradleWorkerMain for tests won"t steal focus!
+    jvmArgs "-Djava.awt.headless=true"
+}
+
+idea {
+    project {
+        jdkName = "17"
+        languageLevel = JavaVersion.VERSION_17
+    }
+}
+
+tasks.withType(Tar) {
+    enabled = false
+}
+
+tasks.withType(AbstractArchiveTask) {
+    preserveFileTimestamps = false
+    reproducibleFileOrder = true
+}
+
+tasks.withType(JavaCompile) {
+    options.encoding = "UTF-8"
+}
+
+test {
+    exclude "**/*IntegrationTest*"
+}
+
+task integrationTest(type: Test) {
+    inputs.property "integration.date", LocalDateTime.now()
+
+    include "**/*IntegrationTest*"
+}
+
+tasks.withType(Test) {
+    testLogging {
+        events TestLogEvent.FAILED
+        exceptionFormat = "full"
+    }
+
+    useJUnitPlatform()
+
+    maxParallelForks = 2
+}
+
+tasks.withType(Jar) {
+    manifest {
+        attributes "Implementation-Title": project.name
+        attributes "Implementation-Version": project.version
+        attributes "Implementation-Vendor": "Springer Nature"
+        attributes "Implementation-Vendor-Id": project.group
+        attributes "Git-Repository": "https://github.com/springernature/http4k-sn-template"
+        attributes "Git-Revision": System.env.GIT_REVISION == null || System.env.GIT_REVISION.trim().isEmpty() ? "SNAPSHOT" : System.env.GIT_REVISION
+    }
+}
+
+
+project.mainClassName = "com.springernature.http4k.template.MainKt"
+
+dependencies {
+    implementation libs.http4kSn
+
+    testImplementation libs.bundles.test
+
+    testRuntimeOnly libs.bundles.testRuntime
+}
+
+distZip.archiveFileName.set("${project.name}.zip")
+
+jar {
+    manifest {
+        attributes "Main-Class": project.mainClassName
+    }
+}
+
+dependencyCheck {
+    suppressionFile = "etc/owasp-security-checks/owasp-suppressions.xml"
+    outputDirectory = "${project.buildDir}/reports"
+    failBuildOnCVSS = 0.0f
+    formats = [ReportGenerator.Format.HTML, ReportGenerator.Format.JSON]
+    analyzers {
+        assemblyEnabled = false
+    }
+}

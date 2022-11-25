@@ -1,0 +1,14 @@
+version: '3'
+services:
+  prepare:
+    image: eu.gcr.io/halfpipe-io/build-bash
+    command: ./.github/prepare-and-cleanup-project/prepare
+    working_dir: /root/code
+    volumes:
+      - ../..:/root/code:delegated
+  cleanup:
+    image: eu.gcr.io/halfpipe-io/build-bash
+    command: ./.github/prepare-and-cleanup-project/cleanup
+    working_dir: /root/code
+    volumes:
+      - ../..:/root/code:delegated

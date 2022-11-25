@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+IFS=$'\n\t'
+
+main() {
+  if [[ $# -lt 1 ]]; then
+    echo "Usage: $0 <app-env> [deploy-env=app-env]"
+    exit 1
+  fi
+  local APP_ENV="$1"
+  local DEPLOY_ENV="${2:-$APP_ENV}"
+
+  local BASE_DIR
+  BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+  cd "$BASE_DIR"
+
+  (
+    export APP_ENV
+    export DEPLOY_ENV
+    "$BASE_DIR/build" integrationTest
+  )
+}
+
+main "$@"

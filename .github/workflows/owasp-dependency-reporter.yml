@@ -1,0 +1,76 @@
+# Generated using halfpipe cli version 3.90.0
+name: owasp-dependency-reporter
+"on":
+  push:
+    branches:
+    - "main"
+    paths:
+    - etc/owasp-security-checks**
+    - build.gradle**
+    - settings.gradle**
+    - .github/workflows/owasp-dependency-reporter.yml
+  schedule:
+  - cron: 0 0 * * *
+  workflow_dispatch: {}
+env:
+  ARTIFACTORY_PASSWORD: ${{ secrets.EE_ARTIFACTORY_PASSWORD }}
+  ARTIFACTORY_URL: ${{ secrets.EE_ARTIFACTORY_URL }}
+  ARTIFACTORY_USERNAME: ${{ secrets.EE_ARTIFACTORY_USERNAME }}
+  BUILD_VERSION: 2.${{ github.run_number }}.0
+  GIT_REVISION: ${{ github.sha }}
+  RUNNING_IN_CI: "true"
+  VAULT_ROLE_ID: ${{ secrets.VAULT_ROLE_ID }}
+  VAULT_SECRET_ID: ${{ secrets.VAULT_SECRET_ID }}
+defaults:
+  run:
+    working-directory: etc/owasp-security-checks
+concurrency: ${{ github.workflow }}
+jobs:
+  owasp-security-report:
+    name: owasp-security-report
+    runs-on: ee-runner
+    timeout-minutes: 60
+    steps:
+    - name: Vault secrets
+      id: secrets
+      uses: hashicorp/vault-action@v2.2.0
+      with:
+        url: https://vault.halfpipe.io
+        method: approle
+        roleId: ${{ env.VAULT_ROLE_ID }}
+        secretId: ${{ env.VAULT_SECRET_ID }}
+        exportEnv: false
+        secrets: |
+          /springernature/data/shared/PPG-owasp-dependency-reporter slack-oauth-token | springernature_data_shared_PPG-owasp-dependency-reporter_slack-oauth-token ;
+    - name: Checkout code
+      uses: actions/checkout@v2
+      with:
+        submodules: recursive
+        ssh-key: ${{ secrets.EE_GITHUB_PRIVATE_KEY }}
+    - name: owasp-security-report
+      uses: docker://eu.gcr.io/halfpipe-io/owasp-dependency-reporter
+      with:
+        entrypoint: /bin/sh
+        args: -c "cd etc/owasp-security-checks; \generate-and-send-report"
+      env:
+        BASE_REPO_DIR: ../../
+        IGNORE_ZERO_ISSUES: "true"
+        PROJECT_NAME: http4k-sn-template
+        SLACK_CHANNEL: http4k-sn
+        SLACK_OAUTH_TOKEN: ${{ steps.secrets.outputs.springernature_data_shared_PPG-owasp-dependency-reporter_slack-oauth-token }}
+    - name: Package artifacts
+      run: tar -cvf /tmp/halfpipe-artifacts.tar target/reports/dependency-check-report.json target/reports/dependency-check-report.html
+      working-directory: ${{ github.workspace }}
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v2
+      with:
+        name: artifacts
+        path: /tmp/halfpipe-artifacts.tar
+    - name: 'Notify slack #http4k-sn (failure)'
+      if: failure()
+      uses: yukin01/slack-bot-action@v0.0.4
+      with:
+        status: ${{ job.status }}
+        oauth_token: ${{ secrets.EE_SLACK_TOKEN }}
+        channel: '#http4k-sn'
+        text: ""

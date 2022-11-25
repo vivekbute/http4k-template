@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+IFS=$'\n\t'
+
+main() {
+  # Remove this workflow
+  rm -rf \
+    .github/prepare-and-cleanup-project \
+    .github/workflows/prepare-and-cleanup-project.yml
+
+  # Remove template deployment workflow
+  rm -rf .github/workflows/http4k-sn-template.yml
+
+  # Remove template checks workflows
+  rm -rf .github/workflows/gradle-versions-reporter.yml
+  rm -rf .github/workflows/owasp-dependency-reporter.yml
+}
+
+main

@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+IFS=$'\n\t'
+
+main() {
+  local BASE_REPO_DIR
+  BASE_REPO_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/.." && pwd )"
+
+  cd "$BASE_REPO_DIR"
+  ./gradlew :grafana-dashboard:run
+}
+
+main

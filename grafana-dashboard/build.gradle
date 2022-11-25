@@ -1,0 +1,19 @@
+plugins {
+    id "application"
+}
+
+apply plugin: "org.jetbrains.kotlin.jvm"
+
+project.mainClassName = "com.springernature.http4k.template.MainKt"
+
+buildDir = "target"
+
+dependencies {
+    implementation libs.grafanarama
+}
+
+jar {
+    manifest {
+        attributes "Main-Class": project.mainClassName
+    }
+}
